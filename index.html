@@ -5,9 +5,7 @@
   <title>Drive Uploader</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    * {
-      box-sizing: border-box;
-    }
+    * { box-sizing: border-box; }
 
     body {
       margin: 0;
@@ -30,6 +28,7 @@
       max-width: 600px;
       width: 100%;
       margin-bottom: 30px;
+      animation: fadeIn 0.8s ease-out;
     }
 
     .upload-box input[type="file"],
@@ -46,10 +45,12 @@
       color: white;
       cursor: pointer;
       margin: 5px;
+      transition: transform 0.2s ease;
     }
 
     .upload-box button:hover {
       background-color: #005ecc;
+      transform: scale(1.05);
     }
 
     .lower-section {
@@ -72,6 +73,7 @@
       min-height: 250px;
       max-height: 400px;
       overflow-y: auto;
+      animation: fadeInUp 0.8s ease-out;
     }
 
     .box h3 {
@@ -89,14 +91,20 @@
       margin: 5px;
       border-radius: 10px;
       border: 2px solid white;
+      cursor: pointer;
+      transition: transform 0.2s ease;
     }
 
-    .file-list {
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
+    .gallery img:hover {
+      transform: scale(1.05);
+    }
+
+    .file-list a {
+      color: #fff;
+      text-decoration: underline;
       font-size: 14px;
-      word-break: break-word;
+      margin-bottom: 6px;
+      display: block;
     }
 
     .notes-box textarea {
@@ -109,19 +117,19 @@
       resize: none;
     }
 
-    .box::-webkit-scrollbar {
-      width: 6px;
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(-20px); }
+      to { opacity: 1; transform: translateY(0); }
     }
 
-    .box::-webkit-scrollbar-thumb {
-      background: rgba(255, 255, 255, 0.3);
-      border-radius: 4px;
+    @keyframes fadeInUp {
+      from { opacity: 0; transform: translateY(40px); }
+      to { opacity: 1; transform: translateY(0); }
     }
   </style>
 </head>
 <body>
 
-  <!-- Upload Form -->
   <div class="upload-box">
     <h2>📤 Upload File to Google Drive</h2>
     <input type="file" id="fileInput" /><br />
@@ -130,21 +138,15 @@
     <p id="status"></p>
   </div>
 
-  <!-- Bottom 3 Boxes -->
   <div class="lower-section">
-    <!-- Image Gallery -->
     <div class="box">
       <h3>🖼️ Images</h3>
       <div class="gallery" id="gallery"></div>
     </div>
-
-    <!-- File List -->
     <div class="box">
       <h3>📂 Files</h3>
       <div class="file-list" id="fileList"></div>
     </div>
-
-    <!-- Notes Box -->
     <div class="box notes-box">
       <h3>📝 Notes</h3>
       <textarea id="notes" placeholder="Write notes or reminders..."></textarea>
@@ -154,10 +156,23 @@
   <script>
     let tokenClient;
     let accessToken = null;
-
-    // ✅ Your actual Google OAuth client ID from the JSON you uploaded
     const CLIENT_ID = '108441946051-oc8kae5351ojn7evuphtlcj1f3eqv7o0.apps.googleusercontent.com';
-    const SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email';
+    const SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/userinfo.email';
+
+    // Load from localStorage
+    const savedImages = JSON.parse(localStorage.getItem("uploadedImages")) || [];
+    const savedFiles = JSON.parse(localStorage.getItem("uploadedFiles")) || [];
+
+    window.onload = () => {
+      savedImages.forEach(file => addImagePreview(file.name, file.link));
+      savedFiles.forEach(file => addFileLink(file.name, file.link));
+      const notes = localStorage.getItem("driveNotes");
+      if (notes) document.getElementById("notes").value = notes;
+    };
+
+    document.getElementById("notes").addEventListener("input", e => {
+      localStorage.setItem("driveNotes", e.target.value);
+    });
 
     function handleAuth() {
       tokenClient = google.accounts.oauth2.initTokenClient({
@@ -172,68 +187,69 @@
     }
 
     function uploadFile() {
-      if (!accessToken) {
-        alert("Please connect to Google first.");
-        return;
-      }
+      if (!accessToken) return alert("Please connect to Google first.");
+      const file = document.getElementById("fileInput").files[0];
+      if (!file) return alert("Please choose a file.");
 
-      const fileInput = document.getElementById("fileInput");
-      const file = fileInput.files[0];
-
-      if (!file) {
-        alert("Please choose a file.");
-        return;
-      }
-
-      const metadata = {
-        name: file.name,
-        mimeType: file.type,
-      };
-
+      const metadata = { name: file.name, mimeType: file.type };
       const form = new FormData();
       form.append("metadata", new Blob([JSON.stringify(metadata)], { type: "application/json" }));
       form.append("file", file);
 
       fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id", {
         method: "POST",
-        headers: new Headers({ Authorization: "Bearer " + accessToken }),
+        headers: { Authorization: "Bearer " + accessToken },
         body: form,
       })
       .then(res => res.json())
       .then(response => {
-        document.getElementById("status").innerText = "✅ File uploaded!";
-        if (file.type.startsWith("image/")) {
-          const reader = new FileReader();
-          reader.onload = function(e) {
-            const img = document.createElement("img");
-            img.src = e.target.result;
-            document.getElementById("gallery").appendChild(img);
-          };
-          reader.readAsDataURL(file);
-        } else {
-          const item = document.createElement("div");
-          item.textContent = file.name;
-          document.getElementById("fileList").appendChild(item);
-        }
+        const fileId = response.id;
+        const link = `https://drive.google.com/file/d/${fileId}/view`;
+
+        // Make public
+        fetch(`https://www.googleapis.com/drive/v3/files/${fileId}/permissions`, {
+          method: "POST",
+          headers: {
+            Authorization: "Bearer " + accessToken,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ role: "reader", type: "anyone" })
+        }).then(() => {
+          document.getElementById("status").innerText = "✅ File uploaded!";
+          if (file.type.startsWith("image/")) {
+            addImagePreview(file.name, link);
+            savedImages.push({ name: file.name, link });
+            localStorage.setItem("uploadedImages", JSON.stringify(savedImages));
+          } else {
+            addFileLink(file.name, link);
+            savedFiles.push({ name: file.name, link });
+            localStorage.setItem("uploadedFiles", JSON.stringify(savedFiles));
+          }
+        });
       })
-      .catch(error => {
-        console.error(error);
+      .catch(() => {
         document.getElementById("status").innerText = "❌ Upload failed!";
       });
     }
 
-    // Save notes locally
-    const notesField = document.getElementById('notes');
-    const savedNotes = localStorage.getItem('driveNotes');
-    if (savedNotes) notesField.value = savedNotes;
+    function addImagePreview(name, link) {
+      const img = document.createElement("img");
+      img.src = link;
+      img.alt = name;
+      img.title = name;
+      img.onclick = () => window.open(link, "_blank");
+      document.getElementById("gallery").appendChild(img);
+    }
 
-    notesField.addEventListener('input', () => {
-      localStorage.setItem('driveNotes', notesField.value);
-    });
+    function addFileLink(name, link) {
+      const a = document.createElement("a");
+      a.href = link;
+      a.target = "_blank";
+      a.textContent = name;
+      document.getElementById("fileList").appendChild(a);
+    }
   </script>
 
-  <!-- Google Identity Services -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
-
 </body>
 </html>
