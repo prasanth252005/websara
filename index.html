@@ -155,8 +155,8 @@
     let tokenClient;
     let accessToken = null;
 
-    const CLIENT_ID = '1234567890-abcde12345xyz.apps.googleusercontent.com';
-
+    // ✅ Your actual Google OAuth client ID from the JSON you uploaded
+    const CLIENT_ID = '108441946051-oc8kae5351ojn7evuphtlcj1f3eqv7o0.apps.googleusercontent.com';
     const SCOPES = 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email';
 
     function handleAuth() {
@@ -232,6 +232,8 @@
     });
   </script>
 
+  <!-- Google Identity Services -->
   <script src="https://accounts.google.com/gsi/client" async defer></script>
+
 </body>
 </html>
